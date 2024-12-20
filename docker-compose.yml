@@ -1,0 +1,22 @@
+version: "3"
+services:
+  server1:
+    image: raft-kv-rs:latest
+    container_name: raft-server-1
+    ports:
+      - 8081
+    command: ["/app/server", "xxxxxx"]
+
+  server2:
+    image: raft-kv-rs:latest
+    container_name: raft-server-2
+    ports:
+      - 8082
+    command: ["/app/server", "xxxxxx"]
+
+  server3:
+    image: raft-kv-rs:latest
+    container_name: raft-server-3
+    ports:
+      - 8082
+    command: ["/app/server", "xxxxxx"]  

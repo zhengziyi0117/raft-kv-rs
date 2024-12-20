@@ -1,0 +1,9 @@
+[
+    {
+        "name": "test-server",
+        "listen": "127.0.0.1:8081",
+        "upstream": "127.0.0.1:8080",
+        "enabled": true
+    }
+]
+// toxiproxy-cli toxic add -t latency -a jitter=27 test-server; toxiproxy-cli toxic add  -t reset_peer --toxicity 0.5 -a timeout=100 test-server
