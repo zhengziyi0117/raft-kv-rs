@@ -4,19 +4,17 @@ use crate::{
         raft_service_server::{RaftService, RaftServiceServer},
         AppendEntriesArgs, AppendEntriesReply, RequestVoteArgs, RequestVoteReply,
     },
-    RAFT_APPEND_ENTRIES_INTERVAL,
 };
 use std::{collections::HashMap, future::Future, net::SocketAddr, sync::Arc};
 use tokio::{
     sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        mpsc::{unbounded_channel, UnboundedSender},
         oneshot,
     },
     task::JoinHandle,
 };
 use tonic::{
-    server,
-    transport::{Error, Server},
+    transport::Server,
     Request, Response, Status,
 };
 

@@ -1,5 +1,5 @@
 use raft_kv_rs::raft_proto::{
-    raft_service_client::RaftServiceClient, RequestVoteArgs, RequestVoteReply,
+    raft_service_client::RaftServiceClient, RequestVoteArgs,
 };
 
 #[tokio::main]

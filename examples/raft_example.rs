@@ -1,15 +1,7 @@
-use std::future::Future;
 use std::{collections::HashMap, net::SocketAddr, str::FromStr};
 
-use chrono::Local;
-use env_logger::Builder;
 use raft_kv_rs::raft_server::{NodeId, RaftServer};
 use tokio::signal::ctrl_c;
-use tokio::{
-    select,
-    sync::mpsc::unbounded_channel,
-    time::{interval, sleep},
-};
 
 async fn start_raft(me: NodeId, peers: HashMap<NodeId, SocketAddr>) {
     RaftServer::new(me, peers.clone(), ctrl_c()).start().await;

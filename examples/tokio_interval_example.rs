@@ -1,10 +1,6 @@
 use std::time::Duration;
 
-use tokio::{
-    select,
-    sync::mpsc::unbounded_channel,
-    time::{self, interval, sleep, timeout},
-};
+use tokio::time::{self, timeout};
 
 #[tokio::main]
 async fn main() {

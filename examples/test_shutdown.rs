@@ -1,13 +1,5 @@
-use std::future::Future;
-use std::{collections::HashMap, net::SocketAddr, str::FromStr};
 
-use raft_kv_rs::raft_server::{NodeId, RaftServer};
 use tokio::signal::ctrl_c;
-use tokio::{
-    select,
-    sync::mpsc::unbounded_channel,
-    time::{interval, sleep},
-};
 
 #[tokio::main]
 async fn main() {

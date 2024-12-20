@@ -1,7 +1,7 @@
 use std::time::{self, Duration};
 
 use raft_kv_rs::raft_proto::{
-    raft_service_client::RaftServiceClient, AppendEntriesArgs, RequestVoteArgs,
+    raft_service_client::RaftServiceClient, AppendEntriesArgs,
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use tonic::transport::{Channel, Uri};
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn request_batch(mut client: RaftServiceClient<Channel>) -> UnboundedReceiver<Duration> {
+async fn request_batch(client: RaftServiceClient<Channel>) -> UnboundedReceiver<Duration> {
     let (tx, rx) = unbounded_channel();
     for i in 0..10 {
         let clone_tx = tx.clone();

@@ -5,7 +5,6 @@ use tokio::{
     sync::mpsc::{unbounded_channel, UnboundedSender},
     time::{self, timeout, Instant},
 };
-use tonic::IntoRequest;
 
 use crate::{
     raft_proto::{AppendEntriesArgs, AppendEntriesReply, RequestVoteArgs, RequestVoteReply},
@@ -305,7 +304,7 @@ impl<'a> RaftFollowerState<'a> {
 }
 
 impl RaftStateMachine for RaftFollowerState<'_> {
-    async fn event_loop(mut self) {
+    async fn event_loop(self) {
         let mut ticker = tokio::time::interval_at(Instant::now(), RAFT_COMMON_INTERVAL);
         loop {
             if self.core.status != RaftNodeStatus::Follower {

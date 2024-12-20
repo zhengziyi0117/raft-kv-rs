@@ -2,7 +2,7 @@ mod error;
 mod node_status;
 
 use std::{
-    collections::HashMap, future::Future, hash::Hash, net::SocketAddr, path::Display, sync::Arc,
+    collections::HashMap, net::SocketAddr,
     time::Duration,
 };
 
@@ -10,16 +10,13 @@ use error::RaftError;
 use node_status::{
     RaftCandidateState, RaftFollowerState, RaftLeaderState, RaftNodeStatus, RaftStateMachine,
 };
-use rand::{rngs::ThreadRng, Rng, RngCore};
+use rand::Rng;
 use tokio::{
     sync::{mpsc::UnboundedReceiver, oneshot::Sender},
     task::JoinHandle,
     time::Instant,
 };
-use tonic::{
-    transport::{Channel, Uri},
-    Response,
-};
+use tonic::transport::{Channel, Uri};
 
 use crate::{
     raft_proto::{
