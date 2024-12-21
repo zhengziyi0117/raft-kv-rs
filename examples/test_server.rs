@@ -4,6 +4,7 @@ use raft_kv_rs::raft_proto::{
     raft_service_server::{RaftService, RaftServiceServer},
     AppendEntriesArgs, AppendEntriesReply, RequestVoteArgs, RequestVoteReply,
 };
+use tokio::signal::ctrl_c;
 use tonic::{transport::Server, Request, Response, Status};
 
 pub struct RaftTestServer {}

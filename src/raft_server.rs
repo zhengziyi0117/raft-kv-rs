@@ -7,11 +7,10 @@ use crate::{
 };
 use std::{collections::HashMap, future::Future, net::SocketAddr, sync::Arc};
 use tokio::{
-    sync::{
+    signal::ctrl_c, sync::{
         mpsc::{unbounded_channel, UnboundedSender},
         oneshot,
-    },
-    task::JoinHandle,
+    }, task::JoinHandle
 };
 use tonic::{
     transport::Server,
@@ -34,12 +33,12 @@ impl RaftServer {
     pub fn new(
         me: NodeId,
         peers: HashMap<NodeId, SocketAddr>,
-        shutdown: impl Future + Send + 'static,
+        // shutdown: impl Future + Send + 'static,
     ) -> Self {
         let (tx, rx) = unbounded_channel::<RaftMessage>();
         let bind_addr = peers.get(&me).unwrap().clone();
         let raft_core_handle = RaftCore::spawn(me, peers, rx);
-        tokio::spawn(RaftServer::check_shutdown(shutdown, tx.clone()));
+        // tokio::spawn(RaftServer::check_shutdown(shutdown, tx.clone()));
 
         let inner = RaftInner {
             tx_api: tx,
@@ -53,22 +52,26 @@ impl RaftServer {
         this
     }
 
-    pub async fn start(self) -> Result<(), tonic::transport::Error> {
+    pub async fn start(self,shutdown: impl Future + Send + 'static) -> Result<(), tonic::transport::Error> {
         let bind_addr = self.inner.bind_addr;
+        let tx = self.inner.tx_api.clone();
         // TODO server_with_shutdown
         log::info!("raft server start! bind:{:?}", bind_addr);
         Server::builder()
             .add_service(RaftServiceServer::new(self))
-            .serve(bind_addr)
+            .serve_with_shutdown(bind_addr, async move {
+                shutdown.await;
+                let _ = tx.send(RaftMessage::Shutdown);
+            })
             .await?;
         Ok(())
     }
 
-    async fn check_shutdown(shutdown: impl Future + 'static, tx: UnboundedSender<RaftMessage>) {
-        shutdown.await;
-        log::info!("receiver ctrl_c");
-        let _ = tx.send(RaftMessage::Shutdown);
-    }
+    // async fn check_shutdown(shutdown: impl Future + 'static, tx: UnboundedSender<RaftMessage>) {
+    //     shutdown.await;
+    //     log::info!("receiver ctrl_c");
+    //     let _ = tx.send(RaftMessage::Shutdown);
+    // }
 }
 
 #[tonic::async_trait]

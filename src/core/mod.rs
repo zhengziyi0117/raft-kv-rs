@@ -1,15 +1,16 @@
+mod candidate_state;
 mod error;
+mod follower_state;
+mod leader_state;
 mod node_status;
+use std::{collections::HashMap, net::SocketAddr, time::Duration};
 
-use std::{
-    collections::HashMap, net::SocketAddr,
-    time::Duration,
-};
-
+use candidate_state::RaftCandidateState;
+use chrono::Local;
 use error::RaftError;
-use node_status::{
-    RaftCandidateState, RaftFollowerState, RaftLeaderState, RaftNodeStatus, RaftStateMachine,
-};
+use follower_state::RaftFollowerState;
+use leader_state::RaftLeaderState;
+use node_status::{RaftNodeStatus, RaftStateMachine};
 use rand::Rng;
 use tokio::{
     sync::{mpsc::UnboundedReceiver, oneshot::Sender},
@@ -53,8 +54,10 @@ pub struct RaftCore {
 impl std::fmt::Display for RaftCore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // todo 增加打印log 最后的term和index
-        write!(f,"RaftCore:(me:{},current_term:{},voted_for:{:?},commit_index:{},last_applied:{},status:{:?},last_update_time:{:?})",
-            self.me,self.current_term,self.voted_for,self.commit_index,self.last_applied,self.status,self.last_update_time)
+        let elapsed = self.last_update_time.elapsed();
+        let timeout = elapsed.as_millis() as i64 - self.next_elect_timeout.as_millis() as i64;
+        write!(f,"RaftCore:(me:{},current_term:{},voted_for:{:?},commit_index:{},last_applied:{},status:{:?},timeout:{})",
+            self.me,self.current_term,self.voted_for,self.commit_index,self.last_applied,self.status,timeout)
     }
 }
 
@@ -99,7 +102,7 @@ impl RaftCore {
     async fn main(mut self) {
         loop {
             // TODO crash后恢复数据
-            log::info!("{} raft server change status", self);
+            log::trace!("{} raft server change status", self);
             match self.status {
                 RaftNodeStatus::Leader => RaftLeaderState::new(&mut self).event_loop().await,
                 RaftNodeStatus::Candidate => RaftCandidateState::new(&mut self).event_loop().await,
@@ -171,7 +174,7 @@ impl RaftCore {
 
     pub(crate) fn gen_next_elect_timeout() -> Duration {
         let mut rng = rand::thread_rng();
-        let next_val = rng.gen_range(0..150);
+        let next_val = rng.gen_range(0..150) + 150;
         Duration::from_millis(next_val)
     }
 
@@ -195,42 +198,4 @@ impl RaftCore {
         };
         Ok(channel)
     }
-
-    // // 请求
-    // pub(crate) async fn send_request_vote(
-    //     &mut self,
-    //     peer: NodeId,
-    //     args: RequestVoteArgs,
-    // ) -> Result<RequestVoteReply, RaftError> {
-    //     let channel = match self.peer2channel.get_mut(&peer) {
-    //         Some(channel) => channel,
-    //         None => {
-    //             let uri = self.peer2uri.get(&peer).unwrap();
-    //             let channel = RaftServiceClient::connect(uri.clone()).await?;
-    //             self.peer2channel.insert(peer, channel);
-    //             self.peer2channel.get_mut(&peer).unwrap()
-    //         }
-    //     };
-    //     let resp = channel.request_vote(args).await?;
-    //     Ok(resp.into_inner())
-    // }
-
-    // pub(crate) async fn send_append_entries(
-    //     &mut self,
-    //     peer: NodeId,
-    //     args: AppendEntriesArgs,
-    // ) -> Result<AppendEntriesReply, RaftError> {
-    //     let channel = match self.peer2channel.get_mut(&peer) {
-    //         Some(channel) => channel,
-    //         None => {
-    //             let uri = self.peer2uri.get(&peer).unwrap();
-    //             let channel = RaftServiceClient::connect(uri.clone()).await?;
-    //             self.peer2channel.insert(peer, channel);
-    //             let channel = self.peer2channel.get_mut(&peer).unwrap();
-    //             channel.clone()
-    //         }
-    //     };
-    //     let resp = channel.append_entries(args).await?;
-    //     Ok(resp.into_inner())
-    // }
 }
