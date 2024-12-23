@@ -1,10 +1,8 @@
 use axum::{
     http::StatusCode,
-    response::IntoResponse,
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
-use serde::Serialize;
 use tokio::sync::oneshot;
 
 #[tokio::main]
@@ -31,7 +29,7 @@ async fn root() -> &'static str {
 }
 
 async fn test() -> Result<Json<(i32, bool)>, StatusCode> {
-    let (tx, mut rx) = oneshot::channel();
+    let (tx, rx) = oneshot::channel();
     tx.send(1).map_err(|e| StatusCode::ACCEPTED)?;
     // let term = rx.await.map_err(|e| StatusCode::ALREADY_REPORTED)?;
     Ok(Json((2, true)))

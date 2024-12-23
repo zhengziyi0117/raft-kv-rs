@@ -3,10 +3,10 @@ use std::{net::SocketAddr, sync::Arc};
 use axum::{
     extract::State,
     http::StatusCode,
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tokio::sync::{broadcast::Receiver, mpsc::UnboundedSender, oneshot};
 
 use crate::core::RaftMessage;

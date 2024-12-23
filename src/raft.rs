@@ -1,23 +1,14 @@
 use crate::{
     core::{RaftCore, RaftMessage},
-    grpc_server::{self, RaftGrpcServer},
+    grpc_server::{RaftGrpcServer},
     http_server::RaftHttpServer,
-    raft_proto::{
-        raft_service_server::{RaftService, RaftServiceServer},
-        AppendEntriesArgs, AppendEntriesReply, RequestVoteArgs, RequestVoteReply,
-    },
     NodeId,
 };
-use std::{collections::HashMap, future::Future, net::SocketAddr, sync::Arc};
-use tokio::{
-    sync::{
+use std::{collections::HashMap, future::Future, net::SocketAddr};
+use tokio::sync::{
         broadcast,
-        mpsc::{unbounded_channel, UnboundedSender},
-        oneshot,
-    },
-    task::JoinHandle,
-};
-use tonic::{transport::Server, Request, Response, Status};
+        mpsc::unbounded_channel,
+    };
 
 pub async fn spawn(
     me: NodeId,

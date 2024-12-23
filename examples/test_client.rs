@@ -1,7 +1,6 @@
 use std::time::{self, Duration};
 
 use raft_kv_rs::raft_proto::{raft_service_client::RaftServiceClient, AppendEntriesArgs};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use tonic::transport::{Channel, Uri};
 
 #[tokio::main]

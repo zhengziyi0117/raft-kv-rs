@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap, fs::OpenOptions, future::Future, net::SocketAddr, str::FromStr,
+    collections::HashMap, fs::OpenOptions, net::SocketAddr, str::FromStr,
 };
 
 use raft_kv_rs::{raft, NodeId};

@@ -1,4 +1,4 @@
-use std::net::{Shutdown, SocketAddr};
+use std::net::SocketAddr;
 
 use tokio::sync::{broadcast::Receiver, mpsc::UnboundedSender, oneshot};
 use tonic::{transport::Server, Request, Response, Status};
