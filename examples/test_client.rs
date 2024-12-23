@@ -1,8 +1,6 @@
 use std::time::{self, Duration};
 
-use raft_kv_rs::raft_proto::{
-    raft_service_client::RaftServiceClient, AppendEntriesArgs,
-};
+use raft_kv_rs::raft_proto::{raft_service_client::RaftServiceClient, AppendEntriesArgs};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use tonic::transport::{Channel, Uri};
 
@@ -11,25 +9,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let uri = Uri::builder()
         .scheme("http")
-        .authority("127.0.0.1:8080")
+        .authority("127.0.0.1:8000")
         .path_and_query("")
         .build()
         .unwrap();
     let client = RaftServiceClient::connect(uri).await.unwrap();
-    let mut rx = request_batch(client).await;
-    while let Some(time) = rx.recv().await {
-        println!("{:?}", time);
-    }
-
+    request_batch(client).await;
     Ok(())
 }
 
-async fn request_batch(client: RaftServiceClient<Channel>) -> UnboundedReceiver<Duration> {
-    let (tx, rx) = unbounded_channel();
-    for i in 0..10 {
-        let clone_tx = tx.clone();
+async fn request_batch(client: RaftServiceClient<Channel>) {
+    let mut handles = vec![];
+    for _ in 0..10 {
         let mut channel = client.clone();
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             loop {
                 let pre = time::Instant::now();
                 let request = tonic::Request::new(AppendEntriesArgs {
@@ -40,19 +33,23 @@ async fn request_batch(client: RaftServiceClient<Channel>) -> UnboundedReceiver<
                     entries: vec![],
                     leader_commit: -1,
                 });
+
                 match channel.append_entries(request).await {
                     Ok(res) => {
-                        log::info!("{:?}", res)
+                        let now = time::Instant::now();
+                        log::info!("time:{:?} [{:?}]", now - pre, res)
                     }
                     Err(err) => {
-                        log::error!("send request error {}", err)
+                        let now = time::Instant::now();
+                        log::error!("time:{:?} [{}]", now - pre, err)
                     }
                 }
-                let now = time::Instant::now();
-                clone_tx.send(now - pre).expect("send error");
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         });
+        handles.push(handle);
     }
-    rx
+    for handle in handles {
+        handle.await.unwrap();
+    }
 }

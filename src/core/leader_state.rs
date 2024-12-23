@@ -1,16 +1,18 @@
-use std::{collections::HashMap, fmt::Display, time::Duration};
+use std::fmt::Display;
 
 use tokio::{
     select,
     sync::mpsc::{unbounded_channel, UnboundedSender},
-    time::{self, timeout, Instant},
+    time::Instant,
 };
 
 use crate::{
-    core::node_status::RaftNodeStatus, raft_proto::{AppendEntriesArgs, AppendEntriesReply, RequestVoteArgs, RequestVoteReply}, raft_server::NodeId, RAFT_APPEND_ENTRIES_INTERVAL, RAFT_COMMIT_INTERVAL, RAFT_COMMON_INTERVAL
+    core::{RaftGrpcHandler, RaftHttpHandle, RaftNodeStatus},
+    raft_proto::{AppendEntriesArgs, AppendEntriesReply},
+    NodeId, RAFT_APPEND_ENTRIES_INTERVAL, RAFT_COMMIT_INTERVAL,
 };
 
-use super::{node_status::RaftStateMachine, RaftCore, RaftMessage};
+use super::{RaftCore, RaftMessage, RaftStateEventLoop};
 
 pub(crate) struct RaftLeaderState<'a> {
     core: &'a mut RaftCore,
@@ -63,7 +65,7 @@ impl<'a> RaftLeaderState<'a> {
                 Ok(channel) => channel,
                 Err(err) => {
                     // TODO continue使用
-                    // log::warn!("get append_entries channel error{}", err);
+                    log::warn!("get append_entries channel error{}", err);
                     continue;
                 }
             };
@@ -74,7 +76,11 @@ impl<'a> RaftLeaderState<'a> {
                         let _ = tx.send((peer, reply.into_inner()));
                     }
                     Err(err) => {
-                        log::warn!("send append entries to peer:{}, but get error {}", peer, err);
+                        log::warn!(
+                            "send append entries to peer:{}, but get error {}",
+                            peer,
+                            err
+                        );
                     }
                 };
             });
@@ -82,7 +88,7 @@ impl<'a> RaftLeaderState<'a> {
     }
 }
 
-impl RaftStateMachine for RaftLeaderState<'_> {
+impl RaftStateEventLoop for RaftLeaderState<'_> {
     async fn event_loop(mut self) {
         let mut broad_append_entries_ticker =
             tokio::time::interval_at(Instant::now(), RAFT_APPEND_ENTRIES_INTERVAL);
@@ -106,6 +112,10 @@ impl RaftStateMachine for RaftLeaderState<'_> {
                             let reply = self.core.handle_request_vote(args).await;
                             tx.send(reply).unwrap();
                         }
+                        Some(RaftMessage::GetStatusRequest(tx)) => {
+                            let reply = self.core.handle_get_status();
+                            tx.send(reply).unwrap();
+                        }
                         Some(RaftMessage::Shutdown) | None => {
                             self.core.status = RaftNodeStatus::Shutdown;
                             return
@@ -115,11 +125,10 @@ impl RaftStateMachine for RaftLeaderState<'_> {
                 msg = append_entries_rx.recv() => {
                     match msg {
                         Some((node_id,reply)) => {
-
+                            // TODO 用于日志确认
                         },
                         None => {
-                            // TODO continue使用
-                            log::warn!("get channel error");
+
                         }
                     }
                 }
@@ -128,7 +137,7 @@ impl RaftStateMachine for RaftLeaderState<'_> {
                     self.broadcast_append_entries(&append_entries_tx).await;
                 }
                 _ = commit_ticker.tick() => {
-                    // TODO 日志再写
+                    // TODO 日志commit
                 }
             }
         }

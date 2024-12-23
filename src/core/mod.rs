@@ -2,15 +2,12 @@ mod candidate_state;
 mod error;
 mod follower_state;
 mod leader_state;
-mod node_status;
 use std::{collections::HashMap, net::SocketAddr, time::Duration};
 
 use candidate_state::RaftCandidateState;
-use chrono::Local;
 use error::RaftError;
 use follower_state::RaftFollowerState;
 use leader_state::RaftLeaderState;
-use node_status::{RaftNodeStatus, RaftStateMachine};
 use rand::Rng;
 use tokio::{
     sync::{mpsc::UnboundedReceiver, oneshot::Sender},
@@ -20,17 +17,44 @@ use tokio::{
 use tonic::transport::{Channel, Uri};
 
 use crate::{
+    http_server::RaftNodeStatusResponse,
     raft_proto::{
         raft_service_client::RaftServiceClient, AppendEntriesArgs, AppendEntriesReply, Entry,
         RequestVoteArgs, RequestVoteReply,
     },
-    raft_server::NodeId,
+    NodeId,
 };
 
 pub enum RaftMessage {
+    // grpc api 不暴露给外部
     AppendEntriesRequest(AppendEntriesArgs, Sender<AppendEntriesReply>),
     RequestVoteRequest(RequestVoteArgs, Sender<RequestVoteReply>),
+
+    // http api 暴露给外部
+    GetStatusRequest(Sender<RaftNodeStatusResponse>),
     Shutdown,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum RaftNodeStatus {
+    Leader,
+    Candidate,
+    Follower,
+    Shutdown,
+}
+
+pub trait RaftStateEventLoop {
+    async fn event_loop(self);
+}
+
+pub trait RaftGrpcHandler {
+    async fn handle_append_entries(&mut self, args: AppendEntriesArgs) -> AppendEntriesReply;
+
+    async fn handle_request_vote(&mut self, args: RequestVoteArgs) -> RequestVoteReply;
+}
+
+pub trait RaftHttpHandle {
+    fn handle_get_status(&self) -> RaftNodeStatusResponse;
 }
 
 pub struct RaftCore {
@@ -115,57 +139,6 @@ impl RaftCore {
         }
     }
 
-    pub(crate) async fn handle_append_entries(
-        &mut self,
-        args: AppendEntriesArgs,
-    ) -> AppendEntriesReply {
-        log::trace!("{} receive append_entries", self);
-
-        if args.term < self.current_term {
-            return AppendEntriesReply {
-                term: self.current_term,
-                success: false,
-            };
-        }
-
-        self.last_update_time = Instant::now();
-        self.to_follower(args.term, Some(args.leader_id));
-
-        AppendEntriesReply {
-            term: self.current_term,
-            success: false,
-        }
-    }
-
-    pub(crate) async fn handle_request_vote(&mut self, args: RequestVoteArgs) -> RequestVoteReply {
-        log::trace!("{} receive request_vote", self);
-        if args.term < self.current_term {
-            return RequestVoteReply {
-                term: self.current_term,
-                vote_granted: false,
-            };
-        }
-        if args.term > self.current_term {
-            self.to_follower(args.term, None);
-        }
-
-        // 可以投票的情况
-        // todo 加上判断日志是否一样新
-        if self.voted_for.is_none() || self.voted_for.is_some_and(|id| id == args.candidate_id) {
-            self.last_update_time = Instant::now();
-            self.voted_for = Some(args.candidate_id);
-            RequestVoteReply {
-                term: self.current_term,
-                vote_granted: true,
-            }
-        } else {
-            RequestVoteReply {
-                term: self.current_term,
-                vote_granted: false,
-            }
-        }
-    }
-
     pub(crate) fn to_follower(&mut self, term: i32, leader: Option<NodeId>) {
         self.current_term = term;
         self.status = RaftNodeStatus::Follower;
@@ -197,5 +170,63 @@ impl RaftCore {
             }
         };
         Ok(channel)
+    }
+}
+
+impl RaftGrpcHandler for RaftCore {
+    async fn handle_append_entries(&mut self, args: AppendEntriesArgs) -> AppendEntriesReply {
+        log::trace!("{} receive append_entries", self);
+
+        if args.term < self.current_term {
+            return AppendEntriesReply {
+                term: self.current_term,
+                success: false,
+            };
+        }
+
+        self.last_update_time = Instant::now();
+        self.to_follower(args.term, Some(args.leader_id));
+
+        AppendEntriesReply {
+            term: self.current_term,
+            success: false,
+        }
+    }
+
+    async fn handle_request_vote(&mut self, args: RequestVoteArgs) -> RequestVoteReply {
+        log::trace!("{} receive request_vote", self);
+
+        if args.term < self.current_term {
+            return RequestVoteReply {
+                term: self.current_term,
+                vote_granted: false,
+            };
+        }
+
+        if args.term > self.current_term {
+            self.to_follower(args.term, None);
+        }
+
+        if self.voted_for.is_none() || self.voted_for == Some(args.candidate_id) {
+            self.voted_for = Some(args.candidate_id);
+            RequestVoteReply {
+                term: self.current_term,
+                vote_granted: true,
+            }
+        } else {
+            RequestVoteReply {
+                term: self.current_term,
+                vote_granted: false,
+            }
+        }
+    }
+}
+
+impl RaftHttpHandle for RaftCore {
+    fn handle_get_status(&self) -> RaftNodeStatusResponse {
+        RaftNodeStatusResponse {
+            current_term: self.current_term,
+            is_leader: self.status == RaftNodeStatus::Leader,
+        }
     }
 }

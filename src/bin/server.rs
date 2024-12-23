@@ -1,10 +1,5 @@
-use std::{collections::HashMap, net::SocketAddr, str::FromStr};
 
 use clap::Parser;
-use log::info;
-use raft_kv_rs::{raft_proto::raft_service_server::RaftServiceServer, raft_server::RaftServer};
-use tokio::signal;
-use tonic::transport::Server;
 
 #[derive(Parser)]
 struct ServerOpts {

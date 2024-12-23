@@ -1,16 +1,10 @@
-use std::{collections::HashMap, fmt::Display, time::Duration};
+use std::fmt::Display;
 
-use tokio::{
-    select,
-    sync::mpsc::{unbounded_channel, UnboundedSender},
-    time::{self, timeout, Instant},
-};
+use tokio::{select, time::Instant};
 
-use crate::{
-    core::node_status::RaftNodeStatus, raft_proto::{AppendEntriesArgs, AppendEntriesReply, RequestVoteArgs, RequestVoteReply}, raft_server::NodeId, RAFT_APPEND_ENTRIES_INTERVAL, RAFT_COMMIT_INTERVAL, RAFT_COMMON_INTERVAL
-};
+use crate::{core::{RaftGrpcHandler, RaftHttpHandle, RaftNodeStatus}, RAFT_COMMON_INTERVAL};
 
-use super::{node_status::RaftStateMachine, RaftCore, RaftMessage};
+use super::{RaftCore, RaftMessage, RaftStateEventLoop};
 
 pub(crate) struct RaftFollowerState<'a> {
     core: &'a mut RaftCore,
@@ -28,7 +22,7 @@ impl<'a> RaftFollowerState<'a> {
     }
 }
 
-impl RaftStateMachine for RaftFollowerState<'_> {
+impl RaftStateEventLoop for RaftFollowerState<'_> {
     async fn event_loop(self) {
         let mut ticker = tokio::time::interval_at(Instant::now(), RAFT_COMMON_INTERVAL);
         loop {
@@ -47,9 +41,13 @@ impl RaftStateMachine for RaftFollowerState<'_> {
                             let reply = self.core.handle_request_vote(args).await;
                             tx.send(reply).unwrap();
                         }
+                        Some(RaftMessage::GetStatusRequest(tx)) => {
+                            let reply = self.core.handle_get_status();
+                            tx.send(reply).unwrap();
+                        }
                         Some(RaftMessage::Shutdown) | None => {
                             self.core.status = RaftNodeStatus::Shutdown;
-                            return 
+                            return
                         }
                     }
                 }
@@ -62,7 +60,7 @@ impl RaftStateMachine for RaftFollowerState<'_> {
                         // self.core.last_update_time = Instant::now();
                         // self.core.next_elect_timeout = RaftCore::gen_next_elect_timeout();
                         // self.core.voted_for = Some(self.core.me);
-                        log::info!("{} follower elect timeout", self);
+                        // log::info!("{} follower elect timeout", self);
                         return
                     }
                 }

@@ -7,10 +7,13 @@ use tokio::{
 };
 
 use crate::{
-    core::node_status::RaftNodeStatus, raft_proto::{AppendEntriesArgs, AppendEntriesReply, RequestVoteArgs, RequestVoteReply}, raft_server::NodeId, RAFT_APPEND_ENTRIES_INTERVAL, RAFT_COMMIT_INTERVAL, RAFT_COMMON_INTERVAL
+    core::{RaftGrpcHandler, RaftHttpHandle, RaftNodeStatus},
+    raft_proto::{RequestVoteArgs, RequestVoteReply},
+    NodeId,
+    RAFT_COMMON_INTERVAL,
 };
 
-use super::{node_status::RaftStateMachine, RaftCore, RaftMessage};
+use super::{RaftCore, RaftMessage, RaftStateEventLoop};
 
 pub(crate) struct RaftCandidateState<'a> {
     core: &'a mut RaftCore,
@@ -50,7 +53,8 @@ impl<'a> RaftCandidateState<'a> {
                 Ok(channel) => channel,
                 Err(_) => continue,
             };
-            // TODO 改成常量的duration 这里应该是选举超时的大概时间 150~300，给到300ms
+            // TODO 改成常量的duration
+            // 这里应该是选举超时的大概时间 150~300，给到300ms
             tokio::spawn(timeout(Duration::from_millis(300), async move {
                 loop {
                     log::info!("send request_vote to peer:{} args:{:?}", peer, args);
@@ -60,11 +64,30 @@ impl<'a> RaftCandidateState<'a> {
                             return;
                         }
                         Err(err) => {
-                            log::warn!("send request vote error {}", err);
+                            match err.code() {
+                                tonic::Code::Unavailable | tonic::Code::DeadlineExceeded | tonic::Code::Unknown => {
+                                    // 网络错误，不用管
+                                    log::warn!(
+                                        "candidate send request vote to peer:{} but get network {}",
+                                        peer,
+                                        err
+                                    );
+                                    // 失败了就暂停一下重试
+                                    time::sleep(Duration::from_millis(50)).await;
+                                    continue;
+                                }
+                                _ => {
+                                    // 其他错误，直接返回
+                                    log::warn!(
+                                        "candidate send request vote to peer:{} but error:{}",
+                                        peer,
+                                        err
+                                    );
+                                    return;
+                                }
+                            }
                         }
                     };
-                    // 失败了就暂停一下
-                    time::sleep(Duration::from_millis(50)).await;
                 }
             }));
         }
@@ -80,7 +103,7 @@ impl<'a> RaftCandidateState<'a> {
     }
 }
 
-impl RaftStateMachine for RaftCandidateState<'_> {
+impl RaftStateEventLoop for RaftCandidateState<'_> {
     async fn event_loop(mut self) {
         let mut ticker = tokio::time::interval_at(Instant::now(), RAFT_COMMON_INTERVAL);
         let (request_vote_tx, mut request_vote_rx) =
@@ -100,9 +123,13 @@ impl RaftStateMachine for RaftCandidateState<'_> {
                             let reply = self.core.handle_request_vote(args).await;
                             tx.send(reply).unwrap();
                         }
+                        Some(RaftMessage::GetStatusRequest(tx)) => {
+                            let reply = self.core.handle_get_status();
+                            tx.send(reply).unwrap();
+                        }
                         Some(RaftMessage::Shutdown) | None => {
                             self.core.status = RaftNodeStatus::Shutdown;
-                            return 
+                            return
                         }
                     }
                 }
@@ -134,10 +161,14 @@ impl RaftStateMachine for RaftCandidateState<'_> {
                                 self.votes.insert(node_id,reply.vote_granted);
                                 if self.can_to_leader() {
                                     self.core.status = RaftNodeStatus::Leader;
+                                    return
                                 }
                             }
                         },
-                        None => todo!(),
+                        None => {
+                            self.core.status = RaftNodeStatus::Shutdown;
+                            return
+                        },
                     }
                 }
             }

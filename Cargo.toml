@@ -12,7 +12,7 @@ name = "raft-client"
 path = "src/bin/client.rs"
 
 [dependencies]
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.41.1", features = ["full"] }
 tonic = "0.12.3"
 prost = "0.13"
 log = "0.4.22"
@@ -21,6 +21,8 @@ bytes = "*"
 clap = { version = "4.5.23", features = ["derive"] }
 rand = "*"
 chrono = "0.4.39"
+axum = "*"
+serde = { version = "1.0.216", features = ["derive"] }
 
 [build-dependencies]
 tonic-build = "0.12.3"

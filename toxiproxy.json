@@ -1,9 +1,28 @@
 [
     {
+        "name": "raft-server0",
+        "listen": "127.0.0.1:8070",
+        "upstream": "127.0.0.1:8090",
+        "enabled": true
+    },
+    {
+        "name": "raft-server1",
+        "listen": "127.0.0.1:8071",
+        "upstream": "127.0.0.1:8091",
+        "enabled": true
+    },
+    {
+        "name": "raft-server2",
+        "listen": "127.0.0.1:8072",
+        "upstream": "127.0.0.1:8092",
+        "enabled": true
+    },
+    {
         "name": "test-server",
-        "listen": "127.0.0.1:8081",
+        "listen": "127.0.0.1:8000",
         "upstream": "127.0.0.1:8080",
         "enabled": true
     }
+
 ]
-// toxiproxy-cli toxic add -t latency -a jitter=27 test-server; toxiproxy-cli toxic add  -t reset_peer --toxicity 0.5 -a timeout=100 test-server
+// toxiproxy-cli toxic add -u -t latency -a jitter=50 test-server; toxiproxy-cli toxic add -t timeout --toxicity 0.8 -a timeout=100 test-server

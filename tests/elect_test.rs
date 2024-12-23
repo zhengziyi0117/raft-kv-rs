@@ -1,7 +1,6 @@
 use std::{collections::HashMap, net::SocketAddr, str::FromStr};
 
-use raft_kv_rs::raft_server::{NodeId, RaftServer};
-use tokio::signal::ctrl_c;
+use raft_kv_rs::NodeId;
 
 #[tokio::test]
 async fn test_elect() {
