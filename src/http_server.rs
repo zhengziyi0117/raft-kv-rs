@@ -1,11 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    routing::get,
-    Json, Router,
-};
+use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use serde::Serialize;
 use tokio::sync::{broadcast::Receiver, mpsc::UnboundedSender, oneshot};
 
@@ -18,7 +13,7 @@ pub struct RaftNodeStatusResponse {
 }
 
 pub trait RaftHttpApi {
-    async fn get_status(&self) -> Result<Json<RaftNodeStatusResponse>, StatusCode>;
+    fn get_status(&self) -> impl std::future::Future<Output = Result<Json<RaftNodeStatusResponse>, StatusCode>> + Send;
 }
 
 // 用于暴露用户查询或者添加日志等接口
@@ -43,11 +38,15 @@ impl RaftHttpServer {
 
     pub async fn start(self) {
         let listener = tokio::net::TcpListener::bind(self.bind_addr).await.unwrap();
-
+        let mut shutdown = self.shutdown.resubscribe();
+        
         let app = Router::new()
             .route("/get_status", get(RaftHttpServer::handle_get_status))
             .with_state(Arc::new(self));
-        axum::serve(listener, app).await.unwrap();
+        
+        axum::serve(listener, app).with_graceful_shutdown(async move {
+            let _ = shutdown.recv().await;
+        }).await.unwrap();
     }
 
     // 这个方法作为实际的 handler
@@ -63,8 +62,8 @@ impl RaftHttpApi for RaftHttpServer {
         let (tx, rx) = oneshot::channel();
         self.tx_api
             .send(RaftMessage::GetStatusRequest(tx))
-            .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let resp = rx.await.map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let resp = rx.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         Ok(Json(resp))
     }
 }

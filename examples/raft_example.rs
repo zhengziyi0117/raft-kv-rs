@@ -2,6 +2,7 @@ use std::{
     collections::HashMap, fs::OpenOptions, net::SocketAddr, str::FromStr,
 };
 
+use env_logger::Target;
 use raft_kv_rs::{raft, NodeId};
 use tokio::signal::ctrl_c;
 
@@ -14,7 +15,7 @@ fn init_log() {
     let mut builder = env_logger::Builder::from_default_env();
     builder
         // .target(Target::Pipe(Box::new(file))) // 日志写入文件
-        .filter_level(log::LevelFilter::Trace) // 设置日志级别
+        .filter(Some("raft_kv_rs"),log::LevelFilter::Trace) // 设置日志级别
         .format_timestamp_millis()
         .init();
 }

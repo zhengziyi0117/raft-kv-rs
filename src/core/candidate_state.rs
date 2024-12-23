@@ -9,8 +9,7 @@ use tokio::{
 use crate::{
     core::{RaftGrpcHandler, RaftHttpHandle, RaftNodeStatus},
     raft_proto::{RequestVoteArgs, RequestVoteReply},
-    NodeId,
-    RAFT_COMMON_INTERVAL,
+    NodeId, RAFT_COMMON_INTERVAL,
 };
 
 use super::{RaftCore, RaftMessage, RaftStateEventLoop};
@@ -65,7 +64,9 @@ impl<'a> RaftCandidateState<'a> {
                         }
                         Err(err) => {
                             match err.code() {
-                                tonic::Code::Unavailable | tonic::Code::DeadlineExceeded | tonic::Code::Unknown => {
+                                tonic::Code::Unavailable
+                                | tonic::Code::DeadlineExceeded
+                                | tonic::Code::Unknown => {
                                     // 网络错误，不用管
                                     log::warn!(
                                         "candidate send request vote to peer:{} but get network {}",
@@ -127,7 +128,7 @@ impl RaftStateEventLoop for RaftCandidateState<'_> {
                             let reply = self.core.handle_get_status();
                             tx.send(reply).unwrap();
                         }
-                        Some(RaftMessage::Shutdown) | None => {
+                        None => {
                             self.core.status = RaftNodeStatus::Shutdown;
                             return
                         }
@@ -170,6 +171,10 @@ impl RaftStateEventLoop for RaftCandidateState<'_> {
                             return
                         },
                     }
+                }
+                _ = self.core.shutdown.recv() => {
+                    self.core.status = RaftNodeStatus::Shutdown;
+                    return
                 }
             }
         }

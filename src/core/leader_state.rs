@@ -116,7 +116,7 @@ impl RaftStateEventLoop for RaftLeaderState<'_> {
                             let reply = self.core.handle_get_status();
                             tx.send(reply).unwrap();
                         }
-                        Some(RaftMessage::Shutdown) | None => {
+                        None => {
                             self.core.status = RaftNodeStatus::Shutdown;
                             return
                         }
@@ -138,6 +138,10 @@ impl RaftStateEventLoop for RaftLeaderState<'_> {
                 }
                 _ = commit_ticker.tick() => {
                     // TODO 日志commit
+                }
+                _ = self.core.shutdown.recv() => {
+                    self.core.status = RaftNodeStatus::Shutdown;
+                    return
                 }
             }
         }

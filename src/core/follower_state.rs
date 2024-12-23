@@ -2,7 +2,10 @@ use std::fmt::Display;
 
 use tokio::{select, time::Instant};
 
-use crate::{core::{RaftGrpcHandler, RaftHttpHandle, RaftNodeStatus}, RAFT_COMMON_INTERVAL};
+use crate::{
+    core::{RaftGrpcHandler, RaftHttpHandle, RaftNodeStatus},
+    RAFT_COMMON_INTERVAL,
+};
 
 use super::{RaftCore, RaftMessage, RaftStateEventLoop};
 
@@ -45,7 +48,7 @@ impl RaftStateEventLoop for RaftFollowerState<'_> {
                             let reply = self.core.handle_get_status();
                             tx.send(reply).unwrap();
                         }
-                        Some(RaftMessage::Shutdown) | None => {
+                        None => {
                             self.core.status = RaftNodeStatus::Shutdown;
                             return
                         }
@@ -63,6 +66,10 @@ impl RaftStateEventLoop for RaftFollowerState<'_> {
                         // log::info!("{} follower elect timeout", self);
                         return
                     }
+                }
+                _ = self.core.shutdown.recv() => {
+                    self.core.status = RaftNodeStatus::Shutdown;
+                    return
                 }
             }
         }

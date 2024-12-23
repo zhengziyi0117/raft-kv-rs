@@ -10,7 +10,7 @@ use follower_state::RaftFollowerState;
 use leader_state::RaftLeaderState;
 use rand::Rng;
 use tokio::{
-    sync::{mpsc::UnboundedReceiver, oneshot::Sender},
+    sync::{broadcast::Receiver, mpsc::UnboundedReceiver, oneshot::Sender},
     task::JoinHandle,
     time::Instant,
 };
@@ -32,7 +32,6 @@ pub enum RaftMessage {
 
     // http api 暴露给外部
     GetStatusRequest(Sender<RaftNodeStatusResponse>),
-    Shutdown,
 }
 
 #[derive(Debug, PartialEq)]
@@ -73,6 +72,7 @@ pub struct RaftCore {
     next_elect_timeout: Duration,
     // 用于与tonic server通信，处理rpc请求
     msg_rx: UnboundedReceiver<RaftMessage>,
+    shutdown: Receiver<()>,
 }
 
 impl std::fmt::Display for RaftCore {
@@ -90,6 +90,7 @@ impl RaftCore {
         me: NodeId,
         peers: HashMap<NodeId, SocketAddr>,
         rx: UnboundedReceiver<RaftMessage>,
+        shutdown: Receiver<()>,
     ) -> JoinHandle<()> {
         let peer2uri = peers
             .iter()
@@ -118,6 +119,7 @@ impl RaftCore {
             msg_rx: rx,
             last_update_time: Instant::now(),
             next_elect_timeout: Self::gen_next_elect_timeout(),
+            shutdown,
         };
         tokio::spawn(this.main())
     }

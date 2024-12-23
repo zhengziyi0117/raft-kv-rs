@@ -1,14 +1,11 @@
 use crate::{
     core::{RaftCore, RaftMessage},
-    grpc_server::{RaftGrpcServer},
+    grpc_server::RaftGrpcServer,
     http_server::RaftHttpServer,
     NodeId,
 };
 use std::{collections::HashMap, future::Future, net::SocketAddr};
-use tokio::sync::{
-        broadcast,
-        mpsc::unbounded_channel,
-    };
+use tokio::sync::{broadcast, mpsc::unbounded_channel};
 
 pub async fn spawn(
     me: NodeId,
@@ -20,7 +17,7 @@ pub async fn spawn(
     let grpc_addr = peers.get(&me).unwrap().clone();
     let (shutdown_tx, _rx) = broadcast::channel(1);
 
-    let core_handle = RaftCore::spawn(me, peers, rx);
+    let core_handle = RaftCore::spawn(me, peers, rx, shutdown_tx.subscribe());
     let grpc_handle =
         tokio::spawn(RaftGrpcServer::new(tx.clone(), grpc_addr, shutdown_tx.subscribe()).start());
     let http_handle =
