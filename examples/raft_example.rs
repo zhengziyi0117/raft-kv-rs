@@ -15,7 +15,7 @@ fn init_log() {
     let mut builder = env_logger::Builder::from_default_env();
     builder
         // .target(Target::Pipe(Box::new(file))) // 日志写入文件
-        .filter(Some("raft_kv_rs"),log::LevelFilter::Trace) // 设置日志级别
+        .filter(Some("raft_kv_rs"),log::LevelFilter::Error) // 设置日志级别
         .format_timestamp_millis()
         .init();
 }

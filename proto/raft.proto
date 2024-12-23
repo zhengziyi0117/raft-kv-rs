@@ -12,7 +12,7 @@ enum CommandType {
 message Entry {
     int32 index = 1;
     int32 term = 2;
-    CommandType type = 3;
+    CommandType commandType = 3;
     string key = 4;
     bytes value = 5;
 }

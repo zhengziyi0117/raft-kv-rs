@@ -64,8 +64,7 @@ impl<'a> RaftLeaderState<'a> {
             let mut channel = match self.core.get_channel(&peer).await {
                 Ok(channel) => channel,
                 Err(err) => {
-                    // TODO continue使用
-                    log::warn!("get append_entries channel error{}", err);
+                    log::warn!("get append_entries channel error:{}", err);
                     continue;
                 }
             };
@@ -77,7 +76,7 @@ impl<'a> RaftLeaderState<'a> {
                     }
                     Err(err) => {
                         log::warn!(
-                            "send append entries to peer:{}, but get error {}",
+                            "send append entries to peer:{}, but get error:{}",
                             peer,
                             err
                         );
@@ -104,16 +103,27 @@ impl RaftStateEventLoop for RaftLeaderState<'_> {
             select! {
                 msg = self.core.msg_rx.recv() => {
                     match msg {
+                        // grpc api
                         Some(RaftMessage::AppendEntriesRequest(args, tx)) => {
-                            let reply = self.core.handle_append_entries(args).await;
+                            let reply = self.core.handle_append_entries(args);
                             tx.send(reply).unwrap();
                         }
                         Some(RaftMessage::RequestVoteRequest(args, tx)) => {
-                            let reply = self.core.handle_request_vote(args).await;
+                            // 可能状态变成follower，但是这里select结束后会有判断leader是否变成follower
+                            let reply = self.core.handle_request_vote(args);
                             tx.send(reply).unwrap();
                         }
+                        // http api
                         Some(RaftMessage::GetStatusRequest(tx)) => {
                             let reply = self.core.handle_get_status();
+                            tx.send(reply).unwrap();
+                        }
+                        Some(RaftMessage::AddLogRequest(args,tx)) => {
+                            let reply = self.core.handle_add_log(args);
+                            tx.send(reply).unwrap();
+                        }
+                        Some(RaftMessage::ListLogsRequest(tx)) => {
+                            let reply = self.core.handle_list_logs();
                             tx.send(reply).unwrap();
                         }
                         None => {
