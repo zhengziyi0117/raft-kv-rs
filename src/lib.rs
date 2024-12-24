@@ -8,7 +8,7 @@ pub mod fsm;
 
 pub mod raft_proto {
     use serde::{ser::SerializeStruct, Serialize};
-    use std::fmt::{write, Display};
+    use std::fmt::Display;
 
     tonic::include_proto!("raft"); // The string specified here must match the proto package name
 

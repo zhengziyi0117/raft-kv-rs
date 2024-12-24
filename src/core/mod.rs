@@ -10,7 +10,6 @@ use error::RaftError;
 use follower_state::RaftFollowerState;
 use leader_state::RaftLeaderState;
 use rand::Rng;
-use serde::Serialize;
 use tokio::{
     sync::{broadcast::Receiver, mpsc::{UnboundedReceiver, UnboundedSender}, oneshot::Sender},
     task::JoinHandle,

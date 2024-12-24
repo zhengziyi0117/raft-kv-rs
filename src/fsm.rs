@@ -1,4 +1,4 @@
-use tokio::sync::{broadcast::{self, Receiver}, mpsc::UnboundedReceiver};
+use tokio::sync::{broadcast::{Receiver}, mpsc::UnboundedReceiver};
 
 use crate::raft_proto::Entry;
 

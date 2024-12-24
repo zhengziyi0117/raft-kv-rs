@@ -8,7 +8,6 @@ use tokio::{
 
 use crate::{
     core::{RaftGrpcHandler, RaftHttpHandle, RaftNodeStatus},
-    fsm::apply_logs,
     raft_proto::{AppendEntriesArgs, AppendEntriesReply, Entry},
     NodeId, RAFT_APPEND_ENTRIES_INTERVAL, RAFT_COMMIT_INTERVAL,
 };
