@@ -9,7 +9,7 @@ use tokio::{
 use crate::{
     core::{RaftGrpcHandler, RaftHttpHandle, RaftNodeStatus},
     raft_proto::{RequestVoteArgs, RequestVoteReply},
-    NodeId, RAFT_COMMON_INTERVAL,
+    NodeId, RAFT_COMMON_INTERVAL, RAFT_ELECT_REQUEST_TIMEOUT,
 };
 
 use super::{RaftCore, RaftMessage, RaftStateEventLoop};
@@ -42,19 +42,20 @@ impl<'a> RaftCandidateState<'a> {
                 continue;
             }
             let tx = request_vote_tx.clone();
+            let (last_log_term, last_log_index) = self.core.get_last_log_term_and_index();
             let args = RequestVoteArgs {
                 term: self.core.current_term,
                 candidate_id: self.core.me,
-                last_log_index: -1,
-                last_log_term: -1,
+                last_log_index: last_log_index,
+                last_log_term: last_log_term,
             };
             let mut channel = match self.core.get_channel(&peer).await {
                 Ok(channel) => channel,
                 Err(_) => continue,
             };
-            // TODO 改成常量的duration
+            
             // 这里应该是选举超时的大概时间 150~300，给到300ms
-            tokio::spawn(timeout(Duration::from_millis(300), async move {
+            tokio::spawn(timeout(RAFT_ELECT_REQUEST_TIMEOUT, async move {
                 loop {
                     log::info!("send request_vote to peer:{} args:{:?}", peer, args);
                     match channel.request_vote(args).await {
@@ -74,7 +75,7 @@ impl<'a> RaftCandidateState<'a> {
                                         err
                                     );
                                     // 失败了就暂停一下重试
-                                    time::sleep(Duration::from_millis(50)).await;
+                                    time::sleep(RAFT_COMMON_INTERVAL).await;
                                     continue;
                                 }
                                 _ => {

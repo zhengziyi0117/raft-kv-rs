@@ -2,7 +2,7 @@ mod candidate_state;
 mod error;
 mod follower_state;
 mod leader_state;
-use std::{collections::HashMap, net::SocketAddr, time::Duration};
+use std::{cmp::min, collections::HashMap, net::SocketAddr, time::Duration};
 
 use bytes::Bytes;
 use candidate_state::RaftCandidateState;
@@ -10,8 +10,9 @@ use error::RaftError;
 use follower_state::RaftFollowerState;
 use leader_state::RaftLeaderState;
 use rand::Rng;
+use serde::Serialize;
 use tokio::{
-    sync::{broadcast::Receiver, mpsc::UnboundedReceiver, oneshot::Sender},
+    sync::{broadcast::Receiver, mpsc::{UnboundedReceiver, UnboundedSender}, oneshot::Sender},
     task::JoinHandle,
     time::Instant,
 };
@@ -23,7 +24,7 @@ use crate::{
     },
     raft_proto::{
         raft_service_client::RaftServiceClient, AppendEntriesArgs, AppendEntriesReply, CommandType,
-        Entry, RequestVoteArgs, RequestVoteReply,
+        Entry, RequestVoteArgs, RequestVoteReply, EMPTY_ENTRY,
     },
     NodeId,
 };
@@ -67,12 +68,12 @@ pub trait RaftHttpHandle {
 }
 
 pub struct RaftCore {
-    current_term: i32,
+    current_term: u32,
     voted_for: Option<NodeId>,
     logs: Vec<Entry>,
     // 所有server volatile
-    commit_index: i32,
-    last_applied: i32,
+    commit_index: u32,
+    last_applied: u32,
     // 非论文上的配置
     me: NodeId,
     status: RaftNodeStatus,
@@ -80,9 +81,11 @@ pub struct RaftCore {
     peer2channel: HashMap<NodeId, RaftServiceClient<Channel>>,
     last_update_time: Instant,
     next_elect_timeout: Duration,
-    // 用于与tonic server通信，处理rpc请求
+    // 用于与grpc\http server通信
     msg_rx: UnboundedReceiver<RaftMessage>,
     shutdown: Receiver<()>,
+    // 用于apply log
+    apply_tx: UnboundedSender<Entry>,
 }
 
 impl std::fmt::Display for RaftCore {
@@ -101,6 +104,7 @@ impl RaftCore {
         peers: HashMap<NodeId, SocketAddr>,
         rx: UnboundedReceiver<RaftMessage>,
         shutdown: Receiver<()>,
+        apply_tx: UnboundedSender<Entry>,
     ) -> JoinHandle<()> {
         let peer2uri = peers
             .iter()
@@ -119,9 +123,9 @@ impl RaftCore {
         let this = Self {
             current_term: 0,
             voted_for: None,
-            logs: vec![],
-            commit_index: -1,
-            last_applied: -1,
+            logs: vec![EMPTY_ENTRY],
+            commit_index: 0,
+            last_applied: 0,
             me,
             status: RaftNodeStatus::Follower,
             peer2uri,
@@ -130,6 +134,7 @@ impl RaftCore {
             last_update_time: Instant::now(),
             next_elect_timeout: Self::gen_next_elect_timeout(),
             shutdown,
+            apply_tx,
         };
         tokio::spawn(this.main())
     }
@@ -151,7 +156,7 @@ impl RaftCore {
         }
     }
 
-    fn to_follower(&mut self, term: i32, leader: Option<NodeId>) {
+    fn to_follower(&mut self, term: u32, leader: Option<NodeId>) {
         self.current_term = term;
         self.status = RaftNodeStatus::Follower;
         self.voted_for = leader;
@@ -184,14 +189,20 @@ impl RaftCore {
         Ok(channel)
     }
 
-    fn get_last_log_term_and_index(&self) -> Option<(usize, usize)> {
-        if self.logs.is_empty() {
-            return None;
-        }
-
+    fn get_last_log_term_and_index(&self) -> (u32, u32) {
         let len = self.logs.len();
         let term = self.logs[len - 1].term;
-        Some((term as usize, len - 1))
+        (term, (len - 1) as u32)
+    }
+
+    // 返回是否请求的日志 更新或者一样新
+    fn is_request_log_newly(&self, request_log_term: u32, request_log_index: u32) -> bool {
+        let (last_log_term, last_log_index) = self.get_last_log_term_and_index();
+        if request_log_term != last_log_term {
+            return request_log_term > last_log_term;
+        } else {
+            return request_log_index >= last_log_index;
+        }
     }
 }
 
@@ -209,9 +220,43 @@ impl RaftGrpcHandler for RaftCore {
         self.last_update_time = Instant::now();
         self.to_follower(args.term, Some(args.leader_id));
 
-        AppendEntriesReply {
-            term: self.current_term,
-            success: false,
+        // 有日志
+        let (_, mut last_log_index) = self.get_last_log_term_and_index();
+        // 先考虑日志匹配的情况
+        if last_log_index >= args.prev_log_index
+            && self.logs[args.prev_log_index as usize].term == args.prev_log_term
+        {
+            // 心跳包 为没有entry, 在这里刚好处理了
+            for entry in args.entries {
+                // 如果日志不匹配
+                if last_log_index >= entry.index
+                    && self.logs[entry.index as usize].term != entry.term
+                {
+                    log::info!("{} truncate logs after {}", self, entry.index);
+                    self.logs.truncate(entry.index as usize);
+                }
+                (_, last_log_index) = self.get_last_log_term_and_index();
+
+                if entry.index == last_log_index+1 {
+                    // TODO
+                    log::info!("{} append logs {}", self, entry);
+                    self.logs.push(entry);
+                }
+                (_, last_log_index) = self.get_last_log_term_and_index();
+            }
+            // 修改commit
+            if args.leader_commit > self.commit_index {
+                self.commit_index = min(args.leader_commit, last_log_index);
+            }
+            return AppendEntriesReply {
+                term: self.current_term,
+                success: true,
+            };
+        } else {
+            return AppendEntriesReply {
+                term: self.current_term,
+                success: false,
+            };
         }
     }
 
@@ -229,8 +274,16 @@ impl RaftGrpcHandler for RaftCore {
             self.to_follower(args.term, None);
         }
 
-        if self.voted_for.is_none() || self.voted_for == Some(args.candidate_id) {
+        if (self.voted_for.is_none()
+            && self.is_request_log_newly(args.last_log_term, args.last_log_index))
+            || self.voted_for == Some(args.candidate_id)
+        {
             self.voted_for = Some(args.candidate_id);
+            log::trace!(
+                "{} send request_vote true for peer:{}",
+                self,
+                args.candidate_id
+            );
             RequestVoteReply {
                 term: self.current_term,
                 vote_granted: true,
@@ -255,26 +308,27 @@ impl RaftHttpHandle for RaftCore {
 
     fn handle_add_log(&mut self, request: RaftAddLogRequest) -> RaftAddLogResponse {
         log::trace!("{} receive add_log", self);
-
+        let (_, last_log_index) = self.get_last_log_term_and_index();
         if self.status != RaftNodeStatus::Leader {
             return RaftAddLogResponse {
                 current_term: self.current_term,
-                log_index: -1,
+                log_index: last_log_index,
                 is_leader: false,
             };
         }
+        // 这里在http接口校验过了
         let command_type = CommandType::from_str_name(&request.command_type).unwrap();
-        let (_, last_index) = self.get_last_log_term_and_index().unwrap_or((0, 0));
+        let next_log_index = last_log_index+1;
         let entry = Entry {
             term: self.current_term,
-            index: last_index as i32,
+            index: next_log_index,
             command_type: command_type.into(),
             key: request.key.clone(),
             value: Bytes::from(request.value).to_vec(),
         };
         self.logs.push(entry);
         RaftAddLogResponse {
-            log_index: (last_index + 1) as _,
+            log_index: next_log_index,
             current_term: self.current_term,
             is_leader: true,
         }
@@ -282,6 +336,8 @@ impl RaftHttpHandle for RaftCore {
 
     fn handle_list_logs(&self) -> RaftLogListResponse {
         RaftLogListResponse {
+            commit_index: self.commit_index,
+            last_applied: self.last_applied,
             logs: self.logs.clone(),
         }
     }

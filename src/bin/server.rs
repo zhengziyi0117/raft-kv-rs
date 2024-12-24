@@ -1,5 +1,6 @@
 
 use clap::Parser;
+use raft_kv_rs::fsm::FinishedStateMachine;
 
 #[derive(Parser)]
 struct ServerOpts {

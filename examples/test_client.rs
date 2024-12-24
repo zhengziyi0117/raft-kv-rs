@@ -25,12 +25,12 @@ async fn request_batch(client: RaftServiceClient<Channel>) {
             loop {
                 let pre = time::Instant::now();
                 let request = tonic::Request::new(AppendEntriesArgs {
-                    term: -1,
-                    leader_id: -1,
-                    prev_log_index: -1,
-                    prev_log_term: -1,
+                    term: 0,
+                    leader_id: 0,
+                    prev_log_index: 0,
+                    prev_log_term: 0,
                     entries: vec![],
-                    leader_commit: -1,
+                    leader_commit: 0,
                 });
 
                 match channel.append_entries(request).await {

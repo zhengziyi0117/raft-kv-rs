@@ -6,7 +6,6 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast::Receiver, mpsc::UnboundedSender, oneshot};
 
@@ -17,14 +16,14 @@ use crate::{
 
 #[derive(Serialize, Debug)]
 pub struct RaftNodeStatusResponse {
-    pub current_term: i32,
+    pub current_term: u32,
     pub is_leader: bool,
 }
 
 #[derive(Serialize, Debug)]
 pub struct RaftAddLogResponse {
-    pub log_index: i32,
-    pub current_term: i32,
+    pub log_index: u32,
+    pub current_term: u32,
     pub is_leader: bool,
 }
 
@@ -37,6 +36,8 @@ pub struct RaftAddLogRequest {
 
 #[derive(Serialize, Debug)]
 pub struct RaftLogListResponse {
+    pub last_applied: u32,
+    pub commit_index: u32,
     pub logs: Vec<Entry>,
 }
 
@@ -78,6 +79,7 @@ impl RaftHttpServer {
     }
 
     pub async fn start(self) {
+        log::info!("raft http server start {:?}", self.bind_addr);
         let listener = tokio::net::TcpListener::bind(self.bind_addr).await.unwrap();
         let mut shutdown = self.shutdown.resubscribe();
 

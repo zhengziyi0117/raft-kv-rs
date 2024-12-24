@@ -3,43 +3,44 @@ syntax = "proto3";
 package raft;
 
 enum CommandType {
-    UNKNOWN = 0;
+    // empty 用于单纯占位 比如index=0的日志
+    EMPTY = 0;
     GET = 1;
     DELETE = 2;
     PUT = 3;
 }
 
 message Entry {
-    int32 index = 1;
-    int32 term = 2;
+    uint32 index = 1;
+    uint32 term = 2;
     CommandType commandType = 3;
     string key = 4;
     bytes value = 5;
 }
 
 message RequestVoteArgs {
-    int32 term = 1;
+    uint32 term = 1;
     int32 candidateId = 2;
-    int32 lastLogIndex = 3;
-    int32 lastLogTerm = 4;
+    uint32 lastLogIndex = 3;
+    uint32 lastLogTerm = 4;
 }
 
 message RequestVoteReply {
-    int32 term = 1;
+    uint32 term = 1;
     bool voteGranted = 2;
 }
 
 message AppendEntriesArgs {
-    int32 term = 1;
+    uint32 term = 1;
     int32 leaderId = 2;
-    int32 prevLogIndex = 3;
-    int32 prevLogTerm = 4;
+    uint32 prevLogIndex = 3;
+    uint32 prevLogTerm = 4;
     repeated Entry entries = 5;
-    int32 leaderCommit = 6;
+    uint32 leaderCommit = 6;
 }
 
 message AppendEntriesReply {
-    int32 term = 1;
+    uint32 term = 1;
     bool success = 2;
 }
  

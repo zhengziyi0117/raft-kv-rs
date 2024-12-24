@@ -1,7 +1,18 @@
 use std::{collections::HashMap, fs::OpenOptions, net::SocketAddr, str::FromStr};
 
-use raft_kv_rs::{raft, NodeId};
+use raft_kv_rs::{fsm::FinishedStateMachine, raft, NodeId};
 use tokio::signal::ctrl_c;
+
+#[derive(Default)]
+pub struct TestFSM {
+
+}
+
+impl FinishedStateMachine for TestFSM {
+    fn apply(&mut self, entry: raft_kv_rs::raft_proto::Entry) {
+        log::info!("apply entry: {}", entry);
+    }
+}
 
 fn init_log() {
     let _file = OpenOptions::new()
@@ -23,5 +34,5 @@ async fn main() {
     let http_addr0 = SocketAddr::from_str("0.0.0.0:6060").unwrap();
     let mut peers0 = HashMap::<NodeId, SocketAddr>::new();
     peers0.insert(0, SocketAddr::from_str("0.0.0.0:8090").unwrap());
-    raft::spawn(0, peers0.clone(), http_addr0, ctrl_c()).await;
+    raft::spawn(0, peers0.clone(), http_addr0,TestFSM::default(), ctrl_c()).await;
 }

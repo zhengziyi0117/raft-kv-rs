@@ -3,8 +3,7 @@ use std::fmt::Display;
 use tokio::{select, time::Instant};
 
 use crate::{
-    core::{RaftGrpcHandler, RaftHttpHandle, RaftNodeStatus},
-    RAFT_COMMON_INTERVAL,
+    core::{RaftGrpcHandler, RaftHttpHandle, RaftNodeStatus}, RAFT_COMMIT_INTERVAL, RAFT_COMMON_INTERVAL
 };
 
 use super::{RaftCore, RaftMessage, RaftStateEventLoop};
@@ -23,11 +22,20 @@ impl<'a> RaftFollowerState<'a> {
     pub(crate) fn new(core: &'a mut RaftCore) -> Self {
         Self { core }
     }
+
+    fn commit_and_apply(&mut self) {
+        for apply_index in self.core.last_applied+1..=self.core.commit_index {
+            let entry = &self.core.logs[apply_index as usize];
+            self.core.apply_tx.send(entry.clone()).unwrap();
+            self.core.last_applied = apply_index;
+        }
+    }
 }
 
 impl RaftStateEventLoop for RaftFollowerState<'_> {
-    async fn event_loop(self) {
+    async fn event_loop(mut self) {
         let mut ticker = tokio::time::interval_at(Instant::now(), RAFT_COMMON_INTERVAL);
+        let mut commit_ticker = tokio::time::interval(RAFT_COMMIT_INTERVAL);
         loop {
             if self.core.status != RaftNodeStatus::Follower {
                 return;
@@ -76,6 +84,9 @@ impl RaftStateEventLoop for RaftFollowerState<'_> {
                         // log::info!("{} follower elect timeout", self);
                         return
                     }
+                }
+                _ = commit_ticker.tick() => {
+                    self.commit_and_apply();
                 }
                 _ = self.core.shutdown.recv() => {
                     self.core.status = RaftNodeStatus::Shutdown;

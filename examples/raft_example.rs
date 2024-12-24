@@ -1,9 +1,6 @@
-use std::{
-    collections::HashMap, fs::OpenOptions, net::SocketAddr, str::FromStr,
-};
+use std::{collections::HashMap, fs::OpenOptions, net::SocketAddr, str::FromStr};
 
-use env_logger::Target;
-use raft_kv_rs::{raft, NodeId};
+use raft_kv_rs::{fsm::FinishedStateMachine, raft, NodeId};
 use tokio::signal::ctrl_c;
 
 fn init_log() {
@@ -15,13 +12,21 @@ fn init_log() {
     let mut builder = env_logger::Builder::from_default_env();
     builder
         // .target(Target::Pipe(Box::new(file))) // 日志写入文件
-        .filter(Some("raft_kv_rs"),log::LevelFilter::Error) // 设置日志级别
+        .filter(Some("raft_kv_rs"), log::LevelFilter::Info) // 设置日志级别
         .format_timestamp_millis()
         .init();
 }
+#[derive(Default)]
+pub struct TestFSM {}
+
+impl FinishedStateMachine for TestFSM {
+    fn apply(&mut self, entry: raft_kv_rs::raft_proto::Entry) {
+        println!("apply entry: {}", entry);
+    }
+}
 
 async fn start_raft(me: NodeId, peers: HashMap<NodeId, SocketAddr>, http_addr: SocketAddr) {
-    raft::spawn(me, peers.clone(), http_addr, ctrl_c()).await;
+    raft::spawn(me, peers.clone(), http_addr, TestFSM::default(), ctrl_c()).await;
 }
 
 #[tokio::main]
